@@ -1,5 +1,7 @@
-//! SkipMap stores key-value pairs, with the keys being unique and always
-//! sorted.
+
+//！
+//! 提供一种 map 用于存储键值对，键值唯一，始终排序
+//! 
 
 use crate::skiplist::level_generator::{GeometricalLevelGenerator, LevelGenerator};
 use crate::skiplist::skipnode::{self, insertion_fixup, SkipListAction};

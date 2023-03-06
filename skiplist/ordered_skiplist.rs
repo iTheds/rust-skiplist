@@ -1,6 +1,8 @@
+//! 
 //! An always-ordered skiplist.
-//! 该处何意,暂时存疑
-//! 一个总是有序的跳表, 应该是排序完成的.
+//! 
+//! 自动排序跳表
+//! 
 
 use crate::skiplist::{
     level_generator::{GeometricalLevelGenerator, LevelGenerator},
@@ -11,31 +13,21 @@ use std::{cmp, cmp::Ordering, default, fmt, hash, hash::Hash, iter, mem, ops, op
 pub use crate::skiplist::skipnode::{IntoIter, Iter, IterMut};
 
 // ////////////////////////////////////////////////////////////////////////////
-// OrderedSkipList
+// OrderedSkipList，自动排序跳表
 // ////////////////////////////////////////////////////////////////////////////
 
-/// The ordered skiplist provides a way of storing elements such that they are
-/// always sorted and at the same time provides efficient way to access, insert
-/// and remove nodes. Just like `SkipList`, it also provides access to indices.
+/// 该跳表提供了一种自动排序的方式，同时保证访问、删除和插入节点的效率与 skiplist 一致。
+/// 
+/// 通常， OrderedSkipList 使用比较函数 `a.partial_cmp(b).expect("Value cannot be ordered")`.
+/// 这可以使列表处理 `Ord` 和 `PartialOrd` 的所有类型；
+/// 但如果插入了无法排序的值， 如 Float::nan()`， 则会触发异常。
+/// 
+/// 有序的跳表必须给定一个排序函数，该函数 `f(a,b)` 为保证效率应当满足以下条件：
+/// - 定义统一上 ： `f(a, b)` 返回的是相同类型的值;
+/// - 符合交换率 ： 如果有 `f(a, b) == Greater` ，那么必然有 `f(b, a) == Less` 和 `f(a, b) == Equal == f(b, a)`.
+/// - 具有传递性 ： 如果 `f(a, b) == Greater` 并且 `f(b, c) == Greater` 那么必然有 `f(a, c) == Greater`.
 ///
-/// By default, the OrderedSkipList uses the comparison function
-/// `a.partial_cmp(b).expect("Value cannot be ordered")`.  This allows the list
-/// to handles all types which implement `Ord` and `PartialOrd`, though it will
-/// panic if value which cannot be ordered is inserted (such as `Float::nan()`).
-///
-/// The ordered skiplist has an associated sorting function which **must** be
-/// well-behaved. Specifically, given some ordering function `f(a, b)`, it must
-/// satisfy the following properties:
-///
-/// - Be well defined: `f(a, b)` should always return the same value
-/// - Be anti-symmetric: `f(a, b) == Greater` iff `f(b, a) == Less` and `f(a, b)
-///   == Equal == f(b, a)`.
-/// - By transitive: If `f(a, b) == Greater` and `f(b, c) == Greater` then `f(a,
-///   c) == Greater`.
-///
-/// **Failure to satisfy these properties can result in unexpected behavior at
-/// best, and at worst will cause a segfault, null deref, or some other bad
-/// behavior.**
+/// 注意：如果不满足以上条件，可能导致计算错误、空值或者其他问题。
 pub struct OrderedSkipList<T> {
     // Storage, this is not sorted
     head: Box<SkipNode<T>>,
@@ -45,25 +37,21 @@ pub struct OrderedSkipList<T> {
 }
 
 // ///////////////////////////////////////////////
-// Inherent methods
+// Inherent methods，内部方法
 // ///////////////////////////////////////////////
 
 impl<T> OrderedSkipList<T>
 where
     T: cmp::PartialOrd,
 {
-    /// Create a new skiplist with the default default comparison function of
-    /// `|&a, &b| a.cmp(b).unwrap()` and the default number of 16 levels.  As a
-    /// result, any element which cannot be ordered will cause insertion to
-    /// panic.
-    ///
-    /// The comparison function can always be changed with `sort_by`, which has
-    /// essentially no cost if done before inserting any elements.
+    /// 使用默认比较方法 |&a, &b| a.cmp(b).unwrap()` 进行创建新的 skiplist ， 仍然延续默认 16 等级，二分分布方式；
+    /// 无法排序的元素将无法进行插入。
+    /// 
+    /// 比较函数可以通过方法， sort_by 进行修改 ，该方法的消耗可以不计。
     ///
     /// # Panic
-    ///
-    /// The default comparison function will cause a panic if an element is
-    /// inserted which cannot be ordered (such as `Float::nan()`).
+    /// 
+    /// 如果是无法进行比较的元素例如 `Float::nan()`， 那么插入时将会呼出异常.
     ///
     /// # Examples
     ///
@@ -85,18 +73,14 @@ where
         }
     }
 
-    /// Constructs a new, empty skiplist with the optimal number of levels for
-    /// the intended capacity.  Specifically, it uses `floor(log2(capacity))`
-    /// number of levels, ensuring that only *a few* nodes occupy the highest
-    /// level.
+    /// 构建一个可容纳 capacity 量级数据的 skiplist， 其计算级数 `floor(log2(capacity))`，
+    /// 确保只有少数节点占据最高级别水平，符合 二分分布。
     ///
-    /// It uses the default comparison function of `|&a, &b| a.cmp(b).unwrap()`
-    /// and can be changed with `sort_by`.
+    /// 使用默认比较函数 `|&a, &b| a.cmp(b).unwrap()`, 可通过 `sort_by` 进行修改。
     ///
     /// # Panic
     ///
-    /// The default comparison function will cause a panic if an element is
-    /// inserted which cannot be ordered (such as `Float::nan()`).
+    /// 如果是无法进行比较的元素例如 `Float::nan()`， 那么插入时将会呼出异常.
     ///
     /// # Examples
     ///
@@ -122,22 +106,15 @@ where
 }
 
 impl<T> OrderedSkipList<T> {
-    /// Create a new skiplist using the provided function in order to determine
-    /// the ordering of elements within the list.  It will be generated with 16
-    /// levels.
+    /// 建立一个新的 skiplist 使用提供的方法进行排序。默认为 16 级。
     ///
     /// # Safety
-    ///
-    /// The ordered skiplist relies on a well-behaved comparison function.
-    /// Specifically, given some ordering function `f(a, b)`, it **must**
-    /// satisfy the following properties:
-    ///
-    /// - Be well defined: `f(a, b)` should always return the same value
-    /// - Be anti-symmetric: `f(a, b) == Greater` if and only if `f(b, a) ==
-    ///   Less`, and `f(a, b) == Equal == f(b, a)`.
-    /// - By transitive: If `f(a, b) == Greater` and `f(b, c) == Greater` then
-    ///   `f(a, c) == Greater`.
-    ///
+    /// 
+    /// 有序的跳表必须给定一个排序函数，该函数 `f(a,b)` 为保证效率应当满足以下条件：
+    /// - 定义统一上 ： `f(a, b)` 返回的是相同类型的值;
+    /// - 符合交换率 ： 如果有 `f(a, b) == Greater` ，那么必然有 `f(b, a) == Less` 和 `f(a, b) == Equal == f(b, a)`.
+    /// - 具有传递性 ： 如果 `f(a, b) == Greater` 并且 `f(b, c) == Greater` 那么必然有 `f(a, c) == Greater`.
+    /// 
     /// **Failure to satisfy these properties can result in unexpected behavior
     /// at best, and at worst will cause a segfault, null deref, or some other
     /// bad behavior.**
@@ -173,8 +150,7 @@ impl<T> OrderedSkipList<T> {
         }
     }
 
-    /// Change the method which determines the ordering of the elements in the
-    /// skiplist.
+    /// 改变 skiplist 的排序方法。
     ///
     /// # Panics
     ///
@@ -186,15 +162,10 @@ impl<T> OrderedSkipList<T> {
     ///
     /// # Safety
     ///
-    /// The ordered skiplist relies on a well-behaved comparison function.
-    /// Specifically, given some ordering function `f(a, b)`, it **must**
-    /// satisfy the following properties:
-    ///
-    /// - Be well defined: `f(a, b)` should always return the same value
-    /// - Be anti-symmetric: `f(a, b) == Greater` if and only if `f(b, a) ==
-    ///   Less`, and `f(a, b) == Equal == f(b, a)`.
-    /// - By transitive: If `f(a, b) == Greater` and `f(b, c) == Greater` then
-    ///   `f(a, c) == Greater`.
+    /// 有序的跳表必须给定一个可信的排序函数，该函数 `f(a,b)` 为保证效率应当满足以下条件：
+    /// - 定义统一上 ： `f(a, b)` 返回的是相同类型的值;
+    /// - 符合交换率 ： 如果有 `f(a, b) == Greater` ，那么必然有 `f(b, a) == Less` 和 `f(a, b) == Equal == f(b, a)`.
+    /// - 具有传递性 ： 如果 `f(a, b) == Greater` 并且 `f(b, c) == Greater` 那么必然有 `f(a, c) == Greater`.
     ///
     /// **Failure to satisfy these properties can result in unexpected behavior
     /// at best, and at worst will cause a segfault, null deref, or some other
@@ -222,7 +193,7 @@ impl<T> OrderedSkipList<T> {
         self.compare = Box::new(cmp);
     }
 
-    /// Clears the skiplist, removing all values.
+    /// 清除 skiplist ， 移除所有值；
     ///
     /// # Examples
     ///
@@ -239,8 +210,8 @@ impl<T> OrderedSkipList<T> {
         self.len = 0;
         *self.head = SkipNode::head(self.level_generator.total());
     }
-
-    /// Returns the number of elements in the skiplist.
+    
+    /// 返回跳表元素数量。
     ///
     /// # Examples
     ///
@@ -256,7 +227,7 @@ impl<T> OrderedSkipList<T> {
         self.len
     }
 
-    /// Returns `true` if the skiplist contains no elements.
+    /// 判断是否为空，如果为空，则返回 'true'。
     ///
     /// # Examples
     ///
@@ -273,8 +244,7 @@ impl<T> OrderedSkipList<T> {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
-
-    /// Insert the element into the skiplist.
+    /// 插入元素
     ///
     /// # Examples
     ///
@@ -295,8 +265,7 @@ impl<T> OrderedSkipList<T> {
         self.len += 1;
     }
 
-    /// Provides a reference to the front element, or `None` if the skiplist is
-    /// empty.
+    /// 获取最开头元素的引用，如果 skiplist 为空则返回 `None`。
     ///
     /// # Examples
     ///
@@ -318,9 +287,8 @@ impl<T> OrderedSkipList<T> {
             Some(&self[0])
         }
     }
-
-    /// Provides a reference to the back element, or `None` if the skiplist is
-    /// empty.
+    
+    /// 获取最后一个元素的引用，如果 skiplist 为空则返回 `None`。
     ///
     /// # Examples
     ///
@@ -343,9 +311,8 @@ impl<T> OrderedSkipList<T> {
             None
         }
     }
-
-    /// Provides a reference to the element at the given index, or `None` if the
-    /// skiplist is empty or the index is out of bounds.
+    
+    /// 获取最后指定位置元素的引用，如果 skiplist 为空或者超出长度则返回 `None`。
     ///
     /// # Examples
     ///
@@ -368,8 +335,7 @@ impl<T> OrderedSkipList<T> {
         }
     }
 
-    /// Removes the first element and returns it, or `None` if the sequence is
-    /// empty.
+    /// 移除第一个元素并且返回， 如果 skiplist 为空则返回 `None`。
     ///
     /// # Examples
     ///
@@ -393,8 +359,7 @@ impl<T> OrderedSkipList<T> {
         }
     }
 
-    /// Removes the last element and returns it, or `None` if the sequence is
-    /// empty.
+    /// 移除最后一个元素并且返回， 如果 skiplist 为空则返回 `None`。
     ///
     /// # Examples
     ///
@@ -419,7 +384,7 @@ impl<T> OrderedSkipList<T> {
         }
     }
 
-    /// Returns true if the value is contained in the skiplist.
+    /// 如果该列表包含该元素，则返回 true.
     ///
     /// # Examples
     ///
@@ -605,12 +570,14 @@ impl<T> OrderedSkipList<T> {
         let len = self.len();
         unsafe { Iter::from_head(&self.head, len) }
     }
-
     /// Constructs a double-ended iterator over a sub-range of elements in the
     /// skiplist, starting at min, and ending at max. If min is `Unbounded`,
     /// then it will be treated as "negative infinity", and if max is
     /// `Unbounded`, then it will be treated as "positive infinity".  Thus
     /// range(Unbounded, Unbounded) will yield the whole collection.
+    /// 在 skiplist 中的一个子元素范围上构造一个双端迭代器，从 min 开始，到 max 结束。
+    /// 如果 min 是 '无界的'，那么它将被视为'负无穷大'；如果 max 是'无界'，则它将被称为 '正无穷大'。
+    /// 因此，范围 (Unbounded, Unbounded)  将产生整个集合。
     ///
     /// # Examples
     ///
@@ -633,8 +600,9 @@ impl<T> OrderedSkipList<T> {
         })
     }
 
-    /// A helper function to ease error handling.
+    /// 辅助函数，用于简化错误处理。
     fn _range(&self, min: Bound<&T>, max: Bound<&T>) -> Option<Iter<T>> {
+        //语法 ： ？？？
         let (first, first_distance_from_head) = match min {
             Bound::Unbounded => (self.head.next_ref()?, 1usize),
             Bound::Included(min) => {
@@ -923,8 +891,7 @@ impl<T> OrderedSkipList<T>
 where
     T: fmt::Debug,
 {
-    /// Prints out the internal structure of the skiplist (for debugging
-    /// purposes).
+    /// 打印 skiplist 的内部结构(用于调试).
     #[allow(dead_code)]
     fn debug_structure(&self) {
         unsafe {

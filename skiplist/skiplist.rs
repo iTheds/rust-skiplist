@@ -5,7 +5,6 @@
 //! 
 //! 
 //! 
-//! A skiplist implementation which allows faster random access than a standard linked list.
 //! 一种skiplist实现，它允许比标准链接列表更快的随机访问
 //! 
 
@@ -21,7 +20,7 @@ use crate::skiplist::{
 pub use crate::skiplist::skipnode::{IntoIter, Iter, IterMut};
 
 // ////////////////////////////////////////////////////////////////////////////
-// SkipList
+// SkipList， 跳表
 // ////////////////////////////////////////////////////////////////////////////
 
 /// SkipList provides a way of storing elements and provides efficient way to
@@ -44,6 +43,7 @@ pub struct SkipList<T> {
 
 impl<T> SkipList<T> {
     /// Create a new skiplist with the default number of 16 levels.
+    /// 生成一个默认等级为 16 的跳表。
     ///
     /// # Examples
     ///
@@ -54,9 +54,10 @@ impl<T> SkipList<T> {
     /// ```
     #[inline]
     pub fn new() -> Self {
+        //等级默认为 16 ， 并且 概率为 1/2, 即以二分法为基础的跳表
         let lg = GeometricalLevelGenerator::new(16, 1.0 / 2.0);
         SkipList {
-            head: Box::new(SkipNode::head(lg.total())),
+            head: Box::new(SkipNode::head(lg.total())),//total 为 16，即链表的纵向层数为 16
             len: 0,
             level_generator: lg,
         }
@@ -67,6 +68,12 @@ impl<T> SkipList<T> {
     /// number of levels, ensuring that only *a few* nodes occupy the highest
     /// level.
     ///
+    /// 构建一个新的空skiplist，并具有预期容量的最佳级别数。
+    /// 具体来说，它使用 `floor(log2(capacity))`级别数，确保只有`少数`节点占据最高级别。
+    /// 
+    /// capacity 表示的是任意的数量级，我们以 log2(capacity) 为最高等级，
+    /// 即，建立的新跳表，能够在满足分布的情况下容纳 capacity 个元素数量。
+    /// 
     /// # Examples
     ///
     /// ```
@@ -85,8 +92,7 @@ impl<T> SkipList<T> {
             level_generator: lg,
         }
     }
-
-    /// Clears the skiplist, removing all values.
+    /// 清空跳表，移除所有有效值
     ///
     /// # Examples
     ///
@@ -100,11 +106,11 @@ impl<T> SkipList<T> {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        self.len = 0;
+        self.len = 0;//长度置为 0 ，重新生成一系列的头节点
+        //那么如果该头节点关联了其他的有效值，这些有效值是否存在没有释放的问题？
         *self.head = SkipNode::head(self.level_generator.total());
     }
-
-    /// Returns the number of elements in the skiplist.
+    /// 返回跳表元素数量.
     ///
     /// # Examples
     ///
@@ -121,6 +127,7 @@ impl<T> SkipList<T> {
     }
 
     /// Returns `true` if the skiplist contains no elements.
+    /// 判断是否为空，如果为空，则返回 `true`.
     ///
     /// # Examples
     ///
@@ -137,13 +144,11 @@ impl<T> SkipList<T> {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
-
-    /// Insert the element into the skiplist at the given index, shifting all
-    /// subsequent nodes down.
+    /// 插入指定元素到跳表中， 向下移动后续所有节点
     ///
     /// # Panics
     ///
-    /// Panics if the insert index is greater than the length of the skiplist.
+    /// 如果插入索引值大于跳表长度，则抛出异常
     ///
     /// # Examples
     ///
@@ -169,6 +174,7 @@ impl<T> SkipList<T> {
     }
 
     /// Insert the element into the front of the skiplist.
+    /// 在跳表头部插入元素.
     ///
     /// # Examples
     ///
@@ -182,8 +188,7 @@ impl<T> SkipList<T> {
     pub fn push_front(&mut self, value: T) {
         self.insert(value, 0);
     }
-
-    /// Insert the element into the back of the skiplist.
+    /// 在跳表尾部插入元素.
     ///
     /// # Examples
     ///
@@ -201,6 +206,7 @@ impl<T> SkipList<T> {
 
     /// Provides a reference to the front element, or `None` if the skiplist is
     /// empty.
+    /// 返回跳表头部的引用，如果 skiplist 为空， 则返回 None.
     ///
     /// # Examples
     ///
@@ -222,9 +228,9 @@ impl<T> SkipList<T> {
             self.get(0)
         }
     }
-
     /// Provides a mutable reference to the front element, or `None` if the
     /// skiplist is empty.
+    /// 返回跳表头部的可变引用，如果 skiplist 为空， 则返回 None.
     ///
     /// # Examples
     ///
@@ -246,9 +252,9 @@ impl<T> SkipList<T> {
             self.get_mut(0)
         }
     }
-
     /// Provides a reference to the back element, or `None` if the skiplist is
     /// empty.
+    /// 返回跳表尾部的引用，如果 skiplist 为空， 则返回 None.
     ///
     /// # Examples
     ///
@@ -271,9 +277,9 @@ impl<T> SkipList<T> {
             None
         }
     }
-
     /// Provides a reference to the back element, or `None` if the skiplist is
     /// empty.
+    /// 返回跳表尾部的可变引用，如果 skiplist 为空， 则返回 None.
     ///
     /// # Examples
     ///
@@ -296,9 +302,9 @@ impl<T> SkipList<T> {
             None
         }
     }
-
     /// Provides a reference to the element at the given index, or `None` if the
     /// skiplist is empty or the index is out of bounds.
+    /// 返回跳表给定索引的引用，如果 skiplist 为空， 则返回 None.
     ///
     /// # Examples
     ///
@@ -315,9 +321,9 @@ impl<T> SkipList<T> {
     pub fn get(&self, index: usize) -> Option<&T> {
         self.get_index(index).and_then(|node| node.item.as_ref())
     }
-
     /// Provides a mutable reference to the element at the given index, or
     /// `None` if the skiplist is empty or the index is out of bounds.
+    /// 返回跳表给定索引的可变引用，如果 skiplist 为空， 则返回 None.
     ///
     /// # Examples
     ///
@@ -335,9 +341,7 @@ impl<T> SkipList<T> {
         self.get_index_mut(index)
             .and_then(|node| node.item.as_mut())
     }
-
-    /// Removes the first element and returns it, or `None` if the sequence is
-    /// empty.
+    /// 移除第一个元素并且返回，如果跳表为空返回 None。
     ///
     /// # Examples
     ///
@@ -360,10 +364,8 @@ impl<T> SkipList<T> {
             Some(self.remove(0))
         }
     }
-
-    /// Removes the last element and returns it, or `None` if the sequence is
-    /// empty.
-    ///
+    /// 移除最后一个元素并且返回，如果跳表为空返回 None。
+    /// 
     /// # Examples
     ///
     /// ```
@@ -386,8 +388,7 @@ impl<T> SkipList<T> {
             None
         }
     }
-
-    /// Removes and returns an element with the given index.
+    /// 移除给定索引距离(index)元素并且返回，如果跳表为空返回 None。
     ///
     /// # Panics
     ///
@@ -412,8 +413,8 @@ impl<T> SkipList<T> {
             node.into_inner().unwrap()
         }
     }
-
     /// Retains only the elements specified by the predicate.
+    /// 保留满足条件 predicate 的元素。
     ///
     /// In other words, remove all elements `e` such that `f(&e)` returns false.
     /// This method operates in place.
@@ -433,8 +434,8 @@ impl<T> SkipList<T> {
     {
         self.len -= self.head.retain(move |_, x| f(x));
     }
-
     /// Get an owning iterator over the entries of the skiplist.
+    /// 获得一个 skiplist 的迭代器，以方便遍历元素。
     ///
     /// # Examples
     ///
@@ -454,6 +455,7 @@ impl<T> SkipList<T> {
     }
 
     /// Creates an iterator over the entries of the skiplist.
+    /// 获得一个 skiplist 的迭代器，以方便遍历元素。
     ///
     /// # Examples
     ///
@@ -493,7 +495,10 @@ impl<T> SkipList<T> {
     /// then it will be treated as "negative infinity", and if max is
     /// `Unbounded`, then it will be treated as "positive infinity".  Thus
     /// range(Unbounded, Unbounded) will yield the whole collection.
-    ///
+    /// 
+    /// 在skiplist中的一个子元素范围上构造一个双端迭代器，从min开始，到max结束。
+    /// 如果min是 '无界' ，那么它将被视为 '负无穷大'，如果 max 是'无界'，则它将被称为'正无穷大'。因此，范围`range(Unbounded, Unbounded)`将产生整个集合。
+    /// 
     /// # Examples
     ///
     /// ```
@@ -560,6 +565,7 @@ where
     T: PartialEq,
 {
     /// Returns true if the value is contained in the skiplist.
+    /// 如果 skiplist 中包含给定值，则返回 true ;
     ///
     /// # Examples
     ///
@@ -576,6 +582,7 @@ where
     }
 
     /// Removes all consecutive repeated elements in the skiplist.
+    /// 移除所有的连续重复的元素;
     ///
     /// # Examples
     ///
@@ -598,7 +605,7 @@ where
 }
 
 // ///////////////////////////////////////////////
-// Internal methods
+// Internal methods,内部方法
 // ///////////////////////////////////////////////
 
 impl<T> SkipList<T> {
@@ -741,7 +748,7 @@ where
 }
 
 // ///////////////////////////////////////////////
-// Trait implementation
+// Trait implementation，特质实现接口
 // ///////////////////////////////////////////////
 
 unsafe impl<T: Send> Send for SkipList<T> {}
@@ -899,7 +906,7 @@ impl<T: Hash> Hash for SkipList<T> {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
-// Tests
+// Tests 
 // ////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
@@ -913,10 +920,8 @@ mod tests {
         for i in (1..100).rev() {
             sl.push_front(i);
         }
-
         assert!(sl.into_iter().eq(1..100));
     }
-
     #[test]
     fn push_back() {
         let mut sl = SkipList::new();
@@ -926,6 +931,7 @@ mod tests {
         assert!(sl.into_iter().eq(1..100));
     }
 
+    //测试插入是否正确，对照组为 Vec ，随机数
     #[test]
     fn insert_rand() {
         use rand::distributions::Uniform;
@@ -935,6 +941,7 @@ mod tests {
         let mut vec: Vec<usize> = Vec::new();
         for i in 0..100 {
             let idx = rng.sample(Uniform::new_inclusive(0, i));
+            // println!("{idx}");
             sl.insert(i, idx);
             vec.insert(idx, i);
         }
@@ -960,7 +967,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut v: Vec<i32> = (0..1000).collect();
         let mut sl: SkipList<i32> = (0..1000).collect();
-        for i in (0..1000).rev() {
+        for i in (0..1000).rev() {// idx 表示的是位置
             let idx = rng.sample(Uniform::new_inclusive(0, i));
             assert_eq!(sl.remove(idx), v.remove(idx));
         }
@@ -969,6 +976,7 @@ mod tests {
     #[test]
     fn append_test() {}
 
+    //测试，每次插入和删除后 check 
     #[test]
     fn basic_small() {
         let mut sl: SkipList<i64> = SkipList::new();
@@ -987,24 +995,31 @@ mod tests {
         sl.check();
     }
 
+    /// 测试结果：
+    /// 500000 - 2.74 s - no check ;
+    /// 5000000 - 32.40 s - no check ;
     #[test]
     fn basic_large() {
-        let size = 500;
-        let mut sl = SkipList::with_capacity(500);
+        let size = 5000;
+        let mut sl = SkipList::with_capacity(5000);
         assert!(sl.is_empty());
+        println!("init skiplist over");
 
         for i in 0..size {
             sl.insert(i, i);
             assert_eq!(sl.len(), i + 1);
         }
-        sl.check();
+        // sl.check();
+        println!("insert skiplist over");
 
         for i in 0..size {
             assert_eq!(sl.remove(0), i);
             assert_eq!(sl.len(), size - i - 1);
         }
-        sl.check();
+        // sl.check();
+        println!("remove skiplist over");
 
+        //以下代码由于每步都要 collect 导致效率极慢
         for i in 0..size {
             sl = (0..size).collect();
             assert_eq!(sl.remove(i), i);
@@ -1030,10 +1045,10 @@ mod tests {
         }
     }
 
+    // 测试跳表作为迭代器使用的基本操作
     #[test]
     fn iter() {
         let size = 10000;
-
         let mut sl: SkipList<_> = (0..size).collect();
 
         fn test<T>(size: usize, mut iter: T)
@@ -1052,7 +1067,6 @@ mod tests {
         test(size, sl.iter_mut().map(|&mut i| i));
         test(size, sl.into_iter());
     }
-
     #[test]
     fn iter_rev() {
         let size = 10000;
@@ -1075,7 +1089,6 @@ mod tests {
         test(size, sl.iter_mut().rev().map(|&mut i| i));
         test(size, sl.into_iter().rev());
     }
-
     #[test]
     fn iter_mixed() {
         let size = 10000;
@@ -1107,7 +1120,6 @@ mod tests {
     #[test]
     fn range_small() {
         let size = 5;
-
         let sl: SkipList<_> = (0..size).collect();
 
         let mut j = 0;

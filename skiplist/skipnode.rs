@@ -1,6 +1,7 @@
 
+//! 
 //! 跳表单个节点
-
+//! 
 
 use std::cmp::Ordering;
 use std::{
@@ -19,11 +20,16 @@ type Link<T> = Option<NonNull<SkipNode<T>>>;
 /// SkipNodes构成SkipList。SkipList拥有第一个头部节点（没有值），每个节点通过“next”拥有下一个节点的所有权。
 #[derive(Clone, Debug)]
 pub struct SkipNode<V> {
-    pub item: Option<V>,    // 不为 none , 除非其为 头节点    
-    pub level: usize,       // 节点高度上限
-    pub prev: Link<V>,      // 前节点
-    pub links: Vec<Link<V>>,// 指向同级下一个节点的链接容器。此 vec 的长度必须为'self.level+1'。links[0]存储指向下一个节点的指针，该节点将被删除。???
-    pub links_len: Vec<usize>,  //每个链接对应长度
+    /// 不为 none , 除非其为 头节点
+    pub item: Option<V>,
+    /// 节点高度上限
+    pub level: usize,
+    /// 前节点，作为跳表为什么存的是前置节点
+    pub prev: Link<V>,
+    /// 指向同级下一个节点的链接容器。此 vec 的长度必须为'self.level+1'。links[0]存储指向下一个节点的指针，该节点将被删除。???
+    pub links: Vec<Link<V>>,
+    ///每个链接对应长度,表示方法
+    pub links_len: Vec<usize>,
 }
 // ///////////////////////////////////////////////
 // SkipNode 方法群
@@ -39,11 +45,11 @@ impl<V> SkipNode<V> {
             // 语法， 这里的 repeat 是 创建一个无限重复单个元素的新迭代器
             // 像 repeat() 这样的无限迭代器经常与像 Iterator::take() 这样的适配器一起使用，以使它们成为有限的。// 但是没有任何对其内存分布的说明，感觉十分不可控
             // Iterator::take(n) 表示取出前 n 个元素
+            // Iterator::collect() 是将迭代器转换为集合， Vec 
             links_len: iter::repeat(0).take(total_levels).collect(),
         }
     }
     ///创建一个节点
-    // 思绪好乱，记不住
     pub fn new(item: V, level: usize) -> Self {
         SkipNode {
             item: Some(item),
@@ -107,7 +113,7 @@ impl<V> SkipNode<V> {
     where
         F: FnMut(Option<&V>, &V) -> bool,
         // 语法 : 采用可变接受方的调用运算符 ,每天都在猜别人的语法，幸好我猜的还准确
-        // 可能就是多次调用嘛， 然后传递的参数是可变的。 
+        // 可能是多次调用， 然后传递的参数是可变的。 
     {
         assert!(self.is_head());
         let mut removed_count = 0;
@@ -165,8 +171,9 @@ impl<V> SkipNode<V> {
     // /////////////////////////////
     // 指针操作,关于整个节点的操作
     // /////////////////////////////
-    //当前节点与指定级别的给定节点之间的距离。
-    ///如果没有给定节点，则返回当前节点和最后一个可能的节点。
+    
+    ///当前节点与指定级别的给定节点之间的距离。
+    ///如果没有给定节点，则返回当前节点和最后一个可能的节点的距离。
     ///如果在给定级别上无法访问节点，则返回Err(())。
     pub fn distance_at_level(&self, level: usize, target: Option<&Self>) -> Result<usize, ()> {
         let distance = match target { //分处理
@@ -389,8 +396,8 @@ impl<V> SkipNode<V> {
         remover.act(self).ok()
     }
 
-    /// 校验 list 完整性
-    ///
+    /// 校验 list 完整性，调用该方法的必须是头节点 ;
+    /// 使用场景如何？？？
     pub fn check(&self) {
         assert!(self.is_head());
         assert!(self.item.is_none());
@@ -549,10 +556,11 @@ pub trait SkipListAction<'a, T>: Sized {
         };
         let level_head_p = level_head as *mut SkipNode<T>;
         if level == 0 {
-            let mut res = self.act_on_node(level_head)?;
+            let mut res = self.act_on_node(level_head)?; //执行继承该特质的动作
             Self::fixup(0, &mut *level_head_p, 0, &mut res);
             Ok((res, distance_this_level))
         } else {
+            // 这里递归调用 ，并且 level - 1 , 使得靠近其距离
             let (mut res, distance_after_head) = self._traverse(level_head, level - 1)?;
             let level_head = &mut *level_head_p;
             Self::fixup(level, level_head, distance_after_head, &mut res);
@@ -1149,20 +1157,21 @@ mod test {
     /// Test test_covariance for SkipNode.
     /// Those functions should compile if our data structures is covariant.
     /// Read Rustonomicon for details.
+    /// 
+    /// 如果我们的数据结构是协变量， 那么应该编译这些函数；
+    /// 该测试用例，似乎是测试参数的输入与返回。
     #[test]
     fn test_covariance() {
         #[allow(dead_code)]
         fn shorten_lifetime<'min, 'max: 'min>(v: SkipNode<&'max ()>) -> SkipNode<&'min ()> {
             v
         }
-
         #[allow(dead_code)]
         fn shorten_lifetime_into_iter<'min, 'max: 'min>(
             v: IntoIter<&'max ()>,
         ) -> IntoIter<&'min ()> {
             v
         }
-
         // IterMut is covariant on the value type.
         // This is consistent with Rust reference &'a T.
         #[allow(dead_code)]
@@ -1171,7 +1180,6 @@ mod test {
         ) -> Iter<'min, &'min ()> {
             v
         }
-
         // IterMut is not covariant on the value type.
         // This is consistent with Rust mutable reference type &mut T.
         // TODO: write a test that can't compile
@@ -1188,23 +1196,26 @@ mod test {
         } else {
             // 获取当前系统下 usize 的长度 * 8 ， 也就是 bits 值字节数； <usize> 32 位中是 4 位， 64 位中是 8 位
             let num_bits = std::mem::size_of::<usize>() * 8; 
-            // leading_zeros 是调用者的 二进制表示形式 中前导 0 的数量；
+            // leading_zeros 是调用者的 二进制表示形式 中前导 0 的数量；假设是 64 位系统， n = 1 ， 那么 n 有 8 位， 即是 64 bits, 二进制前导有 63 个 0 。
             // 假设是 64 位系统， 那就是 64 - (n.leading_zeros() as usize) 
             println!("{num_bits} -  {} = {}, {}", n.leading_zeros() as usize, num_bits - n.leading_zeros() as usize, n.leading_zeros());
             num_bits - n.leading_zeros() as usize
+            //策略推测 ： 为什么要与 2^n 挂钩 ，等级的数量。 
         }
     }
-
     #[test]
     fn test_level_required() {
         assert_eq!(levels_required(0), 1);
         assert_eq!(levels_required(1), 1);
         assert_eq!(levels_required(2), 2);
         assert_eq!(levels_required(3), 2);
+        assert_eq!(levels_required(10), 4);
         assert_eq!(levels_required(1023), 10);
         assert_eq!(levels_required(1024), 11);
     }
 
+    /// 该函数的作用是， 判断 n 的二进制表示，从最低位开始计数有几位连续的 1 
+    /// 该处验证的是 ？？？
     fn level_for_index(mut n: usize) -> usize {
         let mut cnt = 0;
         while n & 0x1 == 1 {
@@ -1213,7 +1224,6 @@ mod test {
         }
         cnt
     }
-
     #[test]
     fn test_level_index() {
         assert_eq!(level_for_index(0), 0);
@@ -1230,38 +1240,53 @@ mod test {
         assert_eq!(level_for_index(11), 2);
     }
 
-    /// Make a list of size n
-    /// levels are evenly spread out
+    /// 生成一个长度为 n ，等级分布均匀的跳表 - 长度为 n 的跳表，存储的实际数据节点数 >= n
     fn new_list_for_test(n: usize) -> Box<SkipNode<usize>> {
-        let max_level = levels_required(n);
+        let max_level = levels_required(n);//先确定等级数量，no expectation in this library.
+        //创建了一个基本的迭代器作为链表的头节点，元素量与等级相同，该头节点存放在 Box 中。
         let mut head = Box::new(SkipNode::<usize>::head(max_level));
         assert_eq!(head.links.len(), max_level);
+        //语法 :  Vec<_> 中的 `_` 表示自动推导一个类型，在此处推到出为 Vec<*mut SkipNode<usize>>
+        //该处 map 中规定了返回的值是什么， 是一个节点 SkipNode， 该节点中的 link 存储了迭代器的 Vec ， 标志跳表中的一个全等级都有的节点。
+        //而 (0..n) 则表示 一个集合， 通过函数 collect() 转换成 Vec ，所以 nodes 表示的是多个拥有全等级的节点的集合
         let mut nodes: Vec<_> = (0..n)
-            .map(|n| {
+            .map(|n| { // n 作为入参， 生成了 n 个节点， 依照计算？？？等级，生成链表
+                // 假设 n 是 10 ，总共有 10 个节点， 等级为 4 ，那么就是有 40 个实际节点， 所以， n 表示的是长度
                 let new_node = Box::new(SkipNode::new(n, level_for_index(n)));
-                Box::into_raw(new_node)
+                Box::into_raw(new_node) // 返回原始指针，使用 Box 作为容器承载
             })
             .collect();
+        //之后的 unsefe 操作，建立在指针上，此时 nodes 类型为 Vec<*mut SkipNode<usize>>
         unsafe {
+            //map 中使用闭包函数，进行匹配计算 max ？？？
             let node_max_level = nodes.iter().map(|&node| (*node).level).max();
             if let Some(node_max_level) = node_max_level {
-                assert_eq!(node_max_level + 1, max_level);
+                assert_eq!(node_max_level + 1, max_level); //校验是否与预期一致
             }
+            //每个等级都需要进行处理
             for level in 0..max_level {
-                let mut last_node = head.as_mut() as *mut SkipNode<usize>;
-                let mut len_left = n;
+                let mut last_node = head.as_mut() as *mut SkipNode<usize>;//每个等级都先从头节点开始
+                let mut len_left = n;//暂存的计数器
+                //当前等级的所有平行的节点进行处理，主要是拼凑和链接
                 for &mut node_ptr in nodes
+                    // iter_mut 转换为 迭代器的指针 IterMut ， filter() 根据提供的方法筛选出符合条件的元素
+                    // 等级需要小于或等于 该节点的 等级
                     .iter_mut()
                     .filter(|&&mut node_ptr| level <= (*node_ptr).level)
                 {
-                    if level == 0 {
-                        (*node_ptr).prev = NonNull::new(last_node);
+                    if level == 0 {//如果是等级 0 ，那么就表示 当前节点 node_ptr 的前序，应该是 head 本身
+                        (*node_ptr).prev = NonNull::new(last_node);//拼凑前续指针
                     }
-                    (*last_node).links[level] = NonNull::new(node_ptr);
+                    (*last_node).links[level] = NonNull::new(node_ptr);//上一个指针的相应等级进行拼接
+                    // 注意 : 该处，很关键，长度为 n ， level_left 的起始就是 n ， 等级为 0..max_level
+                    // 0 level 即 1 ， 1 level 即 2 ， 2 level 即 4 ， 3 level 即 8， 为二进制中 1 的位数表示 , 即 links_len = 2 ^ level
                     (*last_node).links_len[level] = 1 << level;
-                    last_node = node_ptr;
+                    last_node = node_ptr;// 处理下一个节点
+                    // `<<` 的优先级大于 `-=`， 即 len_left -= (1 << level)
                     len_left -= 1 << level;
                 }
+                //最后一个节点的 links_len 
+                //假设有 n = 10, 等级上限为 4 ，最后一个节点 links_len = 10 - (n -1)(2^level) ，那么是有可能为 负数 的
                 (*last_node).links_len[level] = len_left;
             }
         }
